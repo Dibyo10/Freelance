@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Fundraising Chatbot</title>
+  <style>
+    :root {
+      --primary-orange: #ff8c42;
+      --primary-dark-blue: #1e3a8a;
+      --light-orange: #ffecd9;
+      --gradient-start: #1e3a8a;
+      --gradient-end: #ff8c42;
+      --user-bubble: #ff8c42;
+      --bot-bubble: #e6eeff;
+      --text-light: #ffffff;
+      --text-dark: #1e3a8a;
+      --background: #f8fafc;
+      --error: #ef4444;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    body {
+    margin: 0;
+    padding: 0;
+    background: var(--background);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+   width: 100vw;
+    color: var(--text-dark);
+}
+
+    
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: white;
+}
+
+    
+    .header {
+      background: var(--primary-dark-blue);
+      color: var(--text-light);
+      padding: 1.25rem;
+      font-size: 1.4rem;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .header-icon {
+      font-size: 1.6rem;
+    }
+    
+    .chat-box {
+      flex: 1;
+    overflow-y: auto;
+     padding: 1.5rem;
+     background: var(--background);
+    }
+    
+    .chat-message {
+      max-width: 80%;
+      padding: 0.9rem 1.2rem;
+      border-radius: 18px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease-in-out;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+      position: relative;
+      margin-bottom: 20px;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .user {
+      background: var(--user-bubble);
+      color: var(--text-light);
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+      margin-right: 5px;
+    }
+    
+    .bot {
+      background: var(--bot-bubble);
+      color: var(--text-dark);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      margin-left: 5px;
+    }
+    
+    .error {
+      background: #fee2e2;
+      color: var(--error);
+      border-left: 4px solid var(--error);
+    }
+    
+    .message-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      width: 100%;
+    }
+    
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-size: cover;
+      flex-shrink: 0;
+    }
+    
+#chat-form {
+  display: flex;
+  padding: 12px 16px;
+  background: white;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  position: relative;
+  width: 100%;  /* Ensures it stretches across the screen */
+}
+
+#user-input {
+  flex: 1;  /* Makes it take up all available space */
+  padding: 15px 20px;  /* More padding for a larger area */
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 24px;
+  outline: none;
+  font-size: 1rem;  /* Slightly larger font for readability */
+  background: var(--background);
+  transition: border 0.3s, box-shadow 0.3s;
+}
+    
+    #user-input:focus {
+      border-color: var(--primary-orange);
+      box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+    }
+    
+    #send-button {
+      background: var(--primary-dark-blue);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin-left: 10px;
+      transition: background 0.2s, transform 0.2s;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    #send-button:hover {
+      background: var(--primary-orange);
+      transform: scale(1.05);
+    }
+    
+    .typing-indicator {
+      display: flex;
+      padding: 10px;
+      align-items: center;
+      max-width: 100px;
+    }
+    
+    .typing-indicator span {
+      height: 8px;
+      width: 8px;
+      background: var(--primary-dark-blue);
+      border-radius: 50%;
+      display: inline-block;
+      margin: 0 2px;
+      opacity: 0.6;
+      animation: pulse 1.2s infinite;
+    }
+    
+    .typing-indicator span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.7); opacity: 0.4; }
+      50% { transform: scale(1); opacity: 1; }
+    }
+    
+    .welcome-message {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    
+    .welcome-title {
+      font-weight: 600;
+      color: var(--primary-dark-blue);
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+    
+    .server-status {
+      position: absolute;
+      bottom: 70px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 0.8rem;
+      padding: 5px;
+      color: #666;
+      background: rgba(255, 255, 255, 0.8);
+    }
+    
+    .status-online {
+      color: #10b981;
+    }
+    
+    .status-offline {
+      color: var(--error);
+    }
+    
+    /* Time stamps */
+    .timestamp {
+      font-size: 0.7rem;
+      margin-top: 5px;
+      opacity: 0.6;
+    }
+    
+    .user .timestamp {
+      text-align: right;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .bot .timestamp {
+      text-align: left;
+      color: var(--text-dark);
+    }
+    
+    /* Scrollbar styling */
+    .chat-box::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .chat-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    .chat-box::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+    }
+    
+    .chat-box::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    
+    .connection-error {
+      background: #fee2e2;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 10px 0;
+      color: var(--error);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .connection-error svg {
+      flex-shrink: 0;
+    }
+    
+    .error-details {
+      font-family: monospace;
+      font-size: 0.8rem;
+      background: rgba(0, 0, 0, 0.05);
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="header">
+      <span class="header-icon">💬</span>
+      <span>Ask Akiva AI</span>
+    </div>
+    
+    <div class="chat-box" id="chat-box">
+      <div class="welcome-message">
+        <div class="welcome-title">Welcome to our Fundraising Assistant!</div>
+        <p>Ask me anything about donations, fundraising events, or how you can support our cause.</p>
+      </div>
+    </div>
+    
+    <div class="server-status" id="server-status">
+      <span>Checking server status...</span>
+    </div>
+    
+    <form id="chat-form">
+      <input type="text" id="user-input" placeholder="Type your message here..." autocomplete="off" required />
+      <button type="submit" id="send-button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </form>
+  </div>
+  
+  <script>
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('user-input');
+    const chatBox = document.getElementById('chat-box');
+    const sendButton = document.getElementById('send-button');
+    const serverStatus = document.getElementById('server-status');
+    
+    // Configuration 
+    const API_URL = 'http://localhost:8000/ask';
+    const FALLBACK_MODE = true; // Enable fallback mode when server is unavailable
+    let isServerOnline = false;
+    
+    // Fallback responses for when server is offline
+    const fallbackResponses = {
+      "default": "I'd be happy to help you with fundraising information. Could you please be more specific about what you'd like to know?",
+      "hello": "Hello! How can I assist you with your fundraising efforts today?",
+      "donation": "We accept donations through multiple channels including credit card, PayPal, and bank transfers. Would you like information about a specific donation method?",
+      "event": "We have several upcoming fundraising events! Our annual gala is next month, and we're planning a charity run in the fall. Would you like details about either of these?",
+      "help": "There are many ways you can support our cause - through donations, volunteering, or spreading awareness. What interests you most?",
+      "volunteer": "We're always looking for volunteers! You can help with event organization, outreach, or direct service. Would you like me to send you our volunteer application form?"
+    };
+    
+    // Initial bot greeting message
+    setTimeout(() => {
+      appendMessage('bot', "Hi there! I'm your fundraising assistant. How can I help you today?");
+    }, 1000);
+    
+    // Check server status
+    checkServerStatus();
+    
+    function getCurrentTime() {
+      const now = new Date();
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function appendMessage(role, text) {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'message-container';
+      
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.style.width = '32px';
+      avatar.style.height = '32px';
+      avatar.style.borderRadius = '50%';
+      avatar.style.backgroundSize = 'cover';
+      
+      if (role === 'user') {
+        messageContainer.style.flexDirection = 'row-reverse';
+        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/initials/svg?seed=U&backgroundColor=ff8c42')`;
+      } else if (role === 'error') {
+        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Error&backgroundColor=ef4444')`;
+      } else {
+        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
+      }
+      
+      const bubble = document.createElement('div');
+      bubble.className = `chat-message ${role}`;
+      bubble.innerText = text;
+      
+      // Add timestamp
+      const timestamp = document.createElement('div');
+      timestamp.className = 'timestamp';
+      timestamp.innerText = getCurrentTime();
+      bubble.appendChild(timestamp);
+      
+      if (role === 'user') {
+        messageContainer.appendChild(bubble);
+        messageContainer.appendChild(avatar);
+      } else {
+        messageContainer.appendChild(avatar);
+        messageContainer.appendChild(bubble);
+      }
+      
+      chatBox.appendChild(messageContainer);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    
+    function appendErrorMessage(errorMessage, details) {
+      const errorContainer = document.createElement('div');
+      errorContainer.className = 'connection-error';
+      
+      const errorIcon = document.createElement('div');
+      errorIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>`;
+      
+      const errorContent = document.createElement('div');
+      errorContent.innerHTML = `
+        <div>${errorMessage}</div>
+        ${details ? `<div class="error-details">${details}</div>` : ''}
+      `;
+      
+      errorContainer.appendChild(errorIcon);
+      errorContainer.appendChild(errorContent);
+      
+      chatBox.appendChild(errorContainer);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    
+    function showTypingIndicator() {
+      const typingContainer = document.createElement('div');
+      typingContainer.className = 'message-container';
+      typingContainer.id = 'typing-indicator-container';
+      
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.style.width = '32px';
+      avatar.style.height = '32px';
+      avatar.style.borderRadius = '50%';
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
+      
+      const typingIndicator = document.createElement('div');
+      typingIndicator.className = 'typing-indicator bot';
+      
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement('span');
+        typingIndicator.appendChild(dot);
+      }
+      
+      typingContainer.appendChild(avatar);
+      typingContainer.appendChild(typingIndicator);
+      
+      chatBox.appendChild(typingContainer);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    
+    function removeTypingIndicator() {
+      const typingContainer = document.getElementById('typing-indicator-container');
+      if (typingContainer) {
+        typingContainer.remove();
+      }
+    }
+    
+    async function checkServerStatus() {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: "test" }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          isServerOnline = true;
+          serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
+        } else {
+          isServerOnline = false;
+          serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
+        }
+      } catch (err) {
+        isServerOnline = false;
+        serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
+      }
+      
+      // Hide status after 5 seconds
+      setTimeout(() => {
+        serverStatus.style.opacity = '0';
+        serverStatus.style.transition = 'opacity 0.5s';
+      }, 5000);
+    }
+    
+    function getFallbackResponse(userMessage) {
+      const lowerCaseMsg = userMessage.toLowerCase();
+      
+      // Check if message contains any keywords
+      for (const [key, response] of Object.entries(fallbackResponses)) {
+        if (key !== 'default' && lowerCaseMsg.includes(key)) {
+          return response;
+        }
+      }
+      
+      // If no keyword matched, return default response
+      return fallbackResponses.default;
+    }
+    
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const userMessage = input.value.trim();
+      if (!userMessage) return;
+      
+      appendMessage('user', userMessage);
+      input.value = '';
+      
+      // Show typing indicator
+      showTypingIndicator();
+      
+      try {
+        if (isServerOnline) {
+          // Try to fetch from server
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          try {
+            const res = await fetch(API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question: userMessage }),
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+              const data = await res.json();
+              removeTypingIndicator();
+              appendMessage('bot', data.answer || 'Sorry, I didn\'t get that.');
+              return;
+            }
+          } catch (fetchError) {
+            // If fetch fails, we'll fall through to the fallback
+            console.error("Fetch error:", fetchError);
+            isServerOnline = false;
+            serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
+            serverStatus.style.opacity = '1';
+            
+            // Re-hide status after 5 seconds
+            setTimeout(() => {
+              serverStatus.style.opacity = '0';
+            }, 5000);
+          }
+        }
+        
+        // If server is offline or request failed, use fallback
+        if (FALLBACK_MODE) {
+          // Simulate thinking time
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          removeTypingIndicator();
+          appendMessage('bot', getFallbackResponse(userMessage));
+        } else {
+          removeTypingIndicator();
+          appendErrorMessage(
+            "Cannot connect to the server", 
+            "The chatbot is currently running in offline mode. Please check your server connection."
+          );
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        removeTypingIndicator();
+        appendErrorMessage(
+          "An error occurred", 
+          err.message || "Unknown error"
+        );
+      }
+    }
+    
+    // Add form submit event listener
+    form.addEventListener('submit', handleSubmit);
+    
+    // Also add click event to the send button
+    sendButton.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (input.value.trim() !== '') {
+        handleSubmit(e);
+      }
+    });
+    
+    // Focus the input field when the page loads
+    window.onload = function() {
+      input.focus();
+    };
+  </script>
+</body>
+</html>
