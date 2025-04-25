@@ -7,6 +7,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_community.chat_models import ChatOpenAI
 import os
+import uvicorn
 import glob
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,3 +44,7 @@ class Question(BaseModel):
 async def ask_question(q: Question):
     response = qa.invoke(q.question)
     return {"answer": response["result"]}
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))  # Default to 8000 if PORT not set
+    uvicorn.run(app, host="0.0.0.0", port=port)
