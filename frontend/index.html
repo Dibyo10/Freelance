@@ -468,37 +468,39 @@
     }
     
     async function checkServerStatus() {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: "test" }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          isServerOnline = true;
-          serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
-        } else {
-          isServerOnline = false;
-          serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-        }
-      } catch (err) {
-        isServerOnline = false;
-        serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-      }
-      
-      // Hide status after 5 seconds
-      setTimeout(() => {
-        serverStatus.style.opacity = '0';
-        serverStatus.style.transition = 'opacity 0.5s';
-      }, 5000);
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: "test" }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("Test response:", data);
+      isServerOnline = true;
+      serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
+    } else {
+      throw new Error("Non-200 response");
     }
+  } catch (err) {
+    isServerOnline = false;
+    serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
+    console.error("Server check failed:", err);
+  }
+
+  setTimeout(() => {
+    serverStatus.style.opacity = '0';
+    serverStatus.style.transition = 'opacity 0.5s';
+  }, 5000);
+}
+
     
     function getFallbackResponse(userMessage) {
       const lowerCaseMsg = userMessage.toLowerCase();
