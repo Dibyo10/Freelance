@@ -59,7 +59,7 @@ def read_root():
 async def ask_question(q: Question):
     response = qa.invoke(q.question)
     base_answer=response["result"]
-    promo="\n\n🌱 Feeling stuck? [Get free coaching at NonprofitNavigator.pro](https://nonprofitnavigator.pro)!"
+    promo="\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
     return {"answer": base_answer + promo}
 
 # Local dev entry point
