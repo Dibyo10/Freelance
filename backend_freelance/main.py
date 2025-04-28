@@ -49,17 +49,26 @@ class Question(BaseModel):
     question: str
 
 # Root route for Render health check
-@app.get("/",include_in_schema=False)
-@app.head("/",include_in_schema=False)
+@app.get("/", include_in_schema=False)
+@app.head("/", include_in_schema=False)
 def read_root():
     return {"status": "ok"}
 
-# Main /ask endpoint
+# Main /ask endpoint with fallback
 @app.post("/ask")
 async def ask_question(q: Question):
     response = qa.invoke(q.question)
-    base_answer=response["result"]
-    promo="\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
+    base_answer = response["result"]
+    source_documents = response.get("source_documents", [])
+
+    promo = "\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
+
+    # If no good documents are retrieved, fallback to general GPT response
+    if not source_documents or all(not doc.page_content.strip() for doc in source_documents):
+        print("🔄 No relevant docs found. Falling back to general GPT answer.")
+        llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
+        base_answer = llm.invoke(q.question)
+
     return {"answer": base_answer + promo}
 
 # Local dev entry point
