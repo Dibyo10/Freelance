@@ -336,13 +336,12 @@
     const sendButton = document.getElementById('send-button');
     const serverStatus = document.getElementById('server-status');
     
-    // Configuration 
-    const API_URL = 'https://freelance-smtu.onrender.com/ask';
-;
-    const FALLBACK_MODE = true; // Enable fallback mode when server is unavailable
+    // Configuration
+    const API_URL = 'http://localhost:8000/ask';
+    const FALLBACK_MODE = true;
     let isServerOnline = false;
     
-    // Fallback responses for when server is offline
+    // Fallback responses
     const fallbackResponses = {
       "default": "I'd be happy to help you with fundraising information. Could you please be more specific about what you'd like to know?",
       "hello": "Hello! How can I assist you with your fundraising efforts today?",
@@ -351,20 +350,20 @@
       "help": "There are many ways you can support our cause - through donations, volunteering, or spreading awareness. What interests you most?",
       "volunteer": "We're always looking for volunteers! You can help with event organization, outreach, or direct service. Would you like me to send you our volunteer application form?"
     };
-    
-    // Initial bot greeting message
+  
+    // Initial bot greeting
     setTimeout(() => {
       appendMessage('bot', "Hi there! I'm your fundraising assistant. How can I help you today?");
     }, 1000);
-    
+  
     // Check server status
     checkServerStatus();
-    
+  
     function getCurrentTime() {
       const now = new Date();
       return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    
+  
     function appendMessage(role, text) {
       const messageContainer = document.createElement('div');
       messageContainer.className = 'message-container';
@@ -389,7 +388,6 @@
       bubble.className = `chat-message ${role}`;
       bubble.innerText = text;
       
-      // Add timestamp
       const timestamp = document.createElement('div');
       timestamp.className = 'timestamp';
       timestamp.innerText = getCurrentTime();
@@ -406,7 +404,7 @@
       chatBox.appendChild(messageContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
-    
+  
     function appendErrorMessage(errorMessage, details) {
       const errorContainer = document.createElement('div');
       errorContainer.className = 'connection-error';
@@ -431,7 +429,7 @@
       chatBox.appendChild(errorContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
-    
+  
     function showTypingIndicator() {
       const typingContainer = document.createElement('div');
       typingContainer.className = 'message-container';
@@ -459,63 +457,58 @@
       chatBox.appendChild(typingContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
-    
+  
     function removeTypingIndicator() {
       const typingContainer = document.getElementById('typing-indicator-container');
       if (typingContainer) {
         typingContainer.remove();
       }
     }
-    
+  
     async function checkServerStatus() {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: "test" }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log("Test response:", data);
-      isServerOnline = true;
-      serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
-    } else {
-      throw new Error("Non-200 response");
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+  
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: "test" }),
+          signal: controller.signal
+        });
+  
+        clearTimeout(timeoutId);
+  
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Test response:", data);
+          isServerOnline = true;
+          serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
+        } else {
+          throw new Error("Non-200 response");
+        }
+      } catch (err) {
+        isServerOnline = false;
+        serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
+        console.error("Server check failed:", err);
+      }
+  
+      setTimeout(() => {
+        serverStatus.style.opacity = '0';
+        serverStatus.style.transition = 'opacity 0.5s';
+      }, 5000);
     }
-  } catch (err) {
-    isServerOnline = false;
-    serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-    console.error("Server check failed:", err);
-  }
-
-  setTimeout(() => {
-    serverStatus.style.opacity = '0';
-    serverStatus.style.transition = 'opacity 0.5s';
-  }, 5000);
-}
-
-    
+  
     function getFallbackResponse(userMessage) {
       const lowerCaseMsg = userMessage.toLowerCase();
-      
-      // Check if message contains any keywords
       for (const [key, response] of Object.entries(fallbackResponses)) {
         if (key !== 'default' && lowerCaseMsg.includes(key)) {
           return response;
         }
       }
-      
-      // If no keyword matched, return default response
       return fallbackResponses.default;
     }
-    
+  
     async function handleSubmit(e) {
       e.preventDefault();
       const userMessage = input.value.trim();
@@ -523,13 +516,10 @@
       
       appendMessage('user', userMessage);
       input.value = '';
-      
-      // Show typing indicator
       showTypingIndicator();
       
       try {
         if (isServerOnline) {
-          // Try to fetch from server
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
           
@@ -545,27 +535,32 @@
             
             if (res.ok) {
               const data = await res.json();
+              console.log("Server response:", data);
               removeTypingIndicator();
-              appendMessage('bot', data.answer || 'Sorry, I didn\'t get that.');
+              
+              let answer;
+              if (typeof data.answer === 'string') {
+                answer = data.answer;
+              } else if (data.answer?.messages?.length > 0 && data.answer.messages[0].content) {
+                answer = data.answer.messages[0].content;
+              } else {
+                answer = `<pre>${JSON.stringify(data.answer, null, 2)}</pre>`;
+              }
+              appendMessage('bot', answer);
               return;
             }
           } catch (fetchError) {
-            // If fetch fails, we'll fall through to the fallback
             console.error("Fetch error:", fetchError);
             isServerOnline = false;
             serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
             serverStatus.style.opacity = '1';
-            
-            // Re-hide status after 5 seconds
             setTimeout(() => {
               serverStatus.style.opacity = '0';
             }, 5000);
           }
         }
         
-        // If server is offline or request failed, use fallback
         if (FALLBACK_MODE) {
-          // Simulate thinking time
           await new Promise(resolve => setTimeout(resolve, 1000));
           removeTypingIndicator();
           appendMessage('bot', getFallbackResponse(userMessage));
@@ -585,22 +580,21 @@
         );
       }
     }
-    
-    // Add form submit event listener
+  
     form.addEventListener('submit', handleSubmit);
-    
-    // Also add click event to the send button
     sendButton.addEventListener('click', function(e) {
       e.preventDefault();
       if (input.value.trim() !== '') {
         handleSubmit(e);
       }
     });
-    
-    // Focus the input field when the page loads
+  
     window.onload = function() {
       input.focus();
     };
   </script>
+  
 </body>
+
+
 </html>
