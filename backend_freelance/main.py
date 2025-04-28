@@ -4,8 +4,9 @@ from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDo
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
 from langchain_community.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -35,13 +36,28 @@ app.add_middleware(
 
 # Load FAISS vector store
 vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-retriever = vectorstore.as_retriever()
 
-# Setup QA chain
-qa = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key),
+# Smarter retriever
+retriever = vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 3}
+)
+
+# Setup memory for conversation
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True
+)
+
+# Chat model
+chat_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
+
+# Setup Conversational QA Chain
+qa = ConversationalRetrievalChain.from_llm(
+    llm=chat_llm,
     retriever=retriever,
-    return_source_documents=True
+    memory=memory,
+    return_source_documents=False
 )
 
 # Pydantic model for request body
@@ -54,22 +70,23 @@ class Question(BaseModel):
 def read_root():
     return {"status": "ok"}
 
-# Main /ask endpoint with fallback
+# Main /ask endpoint
 @app.post("/ask")
 async def ask_question(q: Question):
-    response = qa.invoke(q.question)
-    base_answer = response["result"]
-    source_documents = response.get("source_documents", [])
-
     promo = "\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
 
-    # If no good documents are retrieved, fallback to general GPT response
-    if not source_documents or all(not doc.page_content.strip() for doc in source_documents):
-        print("🔄 No relevant docs found. Falling back to general GPT answer.")
-        llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
-        base_answer = llm.invoke(q.question)
+    user_question = q.question.strip()
 
-    return {"answer": base_answer + promo}
+    # --- 🧠 Short/generic question detection ---
+    if len(user_question.split()) <= 3:
+        print("🔎 Question too short/generic. Skipping retrieval. Using GPT only.")
+        answer = chat_llm.invoke(user_question)
+    else:
+        print("✅ Good question. Using Retrieval with memory.")
+        result = qa.invoke({"question": user_question})
+        answer = result["answer"]
+
+    return {"answer": answer + promo}
 
 # Local dev entry point
 if __name__ == "__main__":
