@@ -335,12 +335,15 @@
     const chatBox = document.getElementById('chat-box');
     const sendButton = document.getElementById('send-button');
     const serverStatus = document.getElementById('server-status');
-    
+  
     // Configuration
-   const API_URL = 'https://freelance-smtu.onrender.com/ask';
+    const API_URL = 'http://localhost:8000/ask';
     const FALLBACK_MODE = true;
     let isServerOnline = false;
-    
+  
+    // ✅ Track chat history
+    let chatHistory = [];
+  
     // Fallback responses
     const fallbackResponses = {
       "default": "I'd be happy to help you with fundraising information. Could you please be more specific about what you'd like to know?",
@@ -351,12 +354,10 @@
       "volunteer": "We're always looking for volunteers! You can help with event organization, outreach, or direct service. Would you like me to send you our volunteer application form?"
     };
   
-    // Initial bot greeting
     setTimeout(() => {
       appendMessage('bot', "Hi there! I'm your fundraising assistant. How can I help you today?");
     }, 1000);
   
-    // Check server status
     checkServerStatus();
   
     function getCurrentTime() {
@@ -367,14 +368,14 @@
     function appendMessage(role, text) {
       const messageContainer = document.createElement('div');
       messageContainer.className = 'message-container';
-      
+  
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
       avatar.style.width = '32px';
       avatar.style.height = '32px';
       avatar.style.borderRadius = '50%';
       avatar.style.backgroundSize = 'cover';
-      
+  
       if (role === 'user') {
         messageContainer.style.flexDirection = 'row-reverse';
         avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/initials/svg?seed=U&backgroundColor=ff8c42')`;
@@ -383,16 +384,16 @@
       } else {
         avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
       }
-      
+  
       const bubble = document.createElement('div');
       bubble.className = `chat-message ${role}`;
       bubble.innerText = text;
-      
+  
       const timestamp = document.createElement('div');
       timestamp.className = 'timestamp';
       timestamp.innerText = getCurrentTime();
       bubble.appendChild(timestamp);
-      
+  
       if (role === 'user') {
         messageContainer.appendChild(bubble);
         messageContainer.appendChild(avatar);
@@ -400,7 +401,7 @@
         messageContainer.appendChild(avatar);
         messageContainer.appendChild(bubble);
       }
-      
+  
       chatBox.appendChild(messageContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
@@ -408,7 +409,7 @@
     function appendErrorMessage(errorMessage, details) {
       const errorContainer = document.createElement('div');
       errorContainer.className = 'connection-error';
-      
+  
       const errorIcon = document.createElement('div');
       errorIcon.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
@@ -416,16 +417,16 @@
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>`;
-      
+  
       const errorContent = document.createElement('div');
       errorContent.innerHTML = `
         <div>${errorMessage}</div>
         ${details ? `<div class="error-details">${details}</div>` : ''}
       `;
-      
+  
       errorContainer.appendChild(errorIcon);
       errorContainer.appendChild(errorContent);
-      
+  
       chatBox.appendChild(errorContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
@@ -434,7 +435,7 @@
       const typingContainer = document.createElement('div');
       typingContainer.className = 'message-container';
       typingContainer.id = 'typing-indicator-container';
-      
+  
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
       avatar.style.width = '32px';
@@ -442,18 +443,18 @@
       avatar.style.borderRadius = '50%';
       avatar.style.backgroundSize = 'cover';
       avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
-      
+  
       const typingIndicator = document.createElement('div');
       typingIndicator.className = 'typing-indicator bot';
-      
+  
       for (let i = 0; i < 3; i++) {
         const dot = document.createElement('span');
         typingIndicator.appendChild(dot);
       }
-      
+  
       typingContainer.appendChild(avatar);
       typingContainer.appendChild(typingIndicator);
-      
+  
       chatBox.appendChild(typingContainer);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
@@ -473,7 +474,7 @@
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: "test" }),
+          body: JSON.stringify({ question: "test", chat_history: [] }),
           signal: controller.signal
         });
   
@@ -481,7 +482,6 @@
   
         if (response.ok) {
           const data = await response.json();
-          console.log("Test response:", data);
           isServerOnline = true;
           serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
         } else {
@@ -490,7 +490,6 @@
       } catch (err) {
         isServerOnline = false;
         serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-        console.error("Server check failed:", err);
       }
   
       setTimeout(() => {
@@ -509,48 +508,48 @@
       return fallbackResponses.default;
     }
   
+    // ✅ Updated handleSubmit to send chat_history
     async function handleSubmit(e) {
       e.preventDefault();
       const userMessage = input.value.trim();
       if (!userMessage) return;
-      
+  
       appendMessage('user', userMessage);
+      chatHistory.push(userMessage);
       input.value = '';
       showTypingIndicator();
-      
+  
       try {
         if (isServerOnline) {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
-          
+  
           try {
             const res = await fetch(API_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question: userMessage }),
+              body: JSON.stringify({
+                question: userMessage,
+                chat_history: chatHistory
+              }),
               signal: controller.signal
             });
-            
+  
             clearTimeout(timeoutId);
-            
+  
             if (res.ok) {
               const data = await res.json();
-              console.log("Server response:", data);
               removeTypingIndicator();
-              
-              let answer;
-              if (typeof data.answer === 'string') {
-                answer = data.answer;
-              } else if (data.answer?.messages?.length > 0 && data.answer.messages[0].content) {
-                answer = data.answer.messages[0].content;
-              } else {
-                answer = `<pre>${JSON.stringify(data.answer, null, 2)}</pre>`;
-              }
+  
+              let answer = typeof data.answer === 'string'
+                ? data.answer
+                : `<pre>${JSON.stringify(data.answer, null, 2)}</pre>`;
+  
               appendMessage('bot', answer);
+              chatHistory.push(answer);
               return;
             }
           } catch (fetchError) {
-            console.error("Fetch error:", fetchError);
             isServerOnline = false;
             serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
             serverStatus.style.opacity = '1';
@@ -559,25 +558,23 @@
             }, 5000);
           }
         }
-        
+  
         if (FALLBACK_MODE) {
           await new Promise(resolve => setTimeout(resolve, 1000));
           removeTypingIndicator();
-          appendMessage('bot', getFallbackResponse(userMessage));
+          const fallback = getFallbackResponse(userMessage);
+          appendMessage('bot', fallback);
+          chatHistory.push(fallback);
         } else {
           removeTypingIndicator();
           appendErrorMessage(
-            "Cannot connect to the server", 
+            "Cannot connect to the server",
             "The chatbot is currently running in offline mode. Please check your server connection."
           );
         }
       } catch (err) {
-        console.error('Error:', err);
         removeTypingIndicator();
-        appendErrorMessage(
-          "An error occurred", 
-          err.message || "Unknown error"
-        );
+        appendErrorMessage("An error occurred", err.message || "Unknown error");
       }
     }
   
@@ -592,7 +589,9 @@
     window.onload = function() {
       input.focus();
     };
-  </script>
+</script>
+
+
   
 </body>
 
