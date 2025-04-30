@@ -1,4 +1,3 @@
-# build_index.py
 import os, glob
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
@@ -20,9 +19,15 @@ for pdf in pdf_files:
 for docx in word_files:
     documents.extend(UnstructuredWordDocumentLoader(docx).load())
 
+# Debug: Print number of loaded documents
+print(f"Loaded {len(documents)} documents.")
+
 # Split and embed
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 docs = splitter.split_documents(documents)
+
+# Debug: Print number of split documents
+print(f"Split into {len(docs)} chunks.")
 
 # Create FAISS vectorstore
 vectorstore = FAISS.from_documents(docs, embeddings)
