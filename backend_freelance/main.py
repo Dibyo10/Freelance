@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from langchain_community.vectorstores import FAISS
@@ -10,6 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 import uvicorn
+import psutil
+
+
 
 # Load environment variables
 load_dotenv()
@@ -51,6 +55,15 @@ class Question(BaseModel):
 def health_check():
     return {"status": "ok"}
 
+@app.get("/memory")
+def memory_usage():
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    return {
+        "rss_MB": round(mem_info.rss / 1024 / 1024, 2),
+        "vms_MB": round(mem_info.vms / 1024 / 1024, 2)
+    }
+
 @app.post("/ask")
 async def ask_question(q: Question):
     promo = "\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
@@ -69,11 +82,10 @@ async def ask_question(q: Question):
             messages.append(AIMessage(content=msg))
     memory.chat_memory.messages = messages
 
-    # Debug: Print chat history
     print(f"\n📚 Chat history: {q.chat_history}")
     
     # Summary detection
-    is_summary_request = "summarize" in user_question.lower() or "summary" in user_question.lower() or "summarise" in user_question.lower() or "recap" in user_question.lower() 
+    is_summary_request = any(kw in user_question.lower() for kw in ["summarize", "summary", "summarise", "recap"])
     if is_summary_request:
         print("📝 Detected summary request. Using GPT directly.")
         full_context = build_full_context(q.chat_history, user_question)
@@ -120,12 +132,13 @@ async def ask_question(q: Question):
 
             answer = gpt_fallback
 
+    # Log memory usage for debugging
+    mem = psutil.Process().memory_info().rss / 1024 / 1024
+    print(f"📈 Memory usage during /ask: {mem:.2f} MB")
+
     return {"answer": answer + promo}
 
 def build_full_context(history: list[str], latest_question: str) -> str:
-    """
-    Format full chat history into a string and add the current question.
-    """
     context = "Here's the chat so far:\n"
     for i, msg in enumerate(history):
         role = "User" if i % 2 == 0 else "Bot"
