@@ -1,43 +1,55 @@
-
-from fastapi import FastAPI
+# main.py
+import time
+import psutil
+import os
+import uvicorn
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
 from langchain_community.vectorstores import FAISS
-from langchain_community.chat_models import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
+from langchain_community.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.schema import HumanMessage, AIMessage
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-import os
-import uvicorn
-import psutil
 
-
-
-# Load environment variables
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY not found in .env")
 
-# FastAPI setup
 app = FastAPI()
+
+# 1) Mount CORS first so OPTIONS never 400
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-# Embeddings and vector store
-embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-chat_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
+# 2) Simple request/response logging
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"➡️ {request.method} {request.url}")
+    start = time.time()
+    response = await call_next(request)
+    elapsed = time.time() - start
+    print(f"⬅️ {request.method} {request.url} → {response.status_code} ({elapsed:.2f}s)")
+    return response
 
-# Chain (memory assigned per request)
+# Embeddings + FAISS
+embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+vectorstore = FAISS.load_local(
+    "faiss_index", embeddings, allow_dangerous_deserialization=True
+)
+chat_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
+retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+
+# RAG chain (memory will be set per request)
 qa_chain = ConversationalRetrievalChain.from_llm(
     llm=chat_llm,
     retriever=retriever,
@@ -45,7 +57,6 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     return_source_documents=False
 )
 
-# Request schema
 class Question(BaseModel):
     question: str
     chat_history: list[str] = []
@@ -57,95 +68,77 @@ def health_check():
 
 @app.get("/memory")
 def memory_usage():
-    process = psutil.Process()
-    mem_info = process.memory_info()
+    proc = psutil.Process()
+    m = proc.memory_info()
     return {
-        "rss_MB": round(mem_info.rss / 1024 / 1024, 2),
-        "vms_MB": round(mem_info.vms / 1024 / 1024, 2)
+        "rss_MB": round(m.rss / 1024 / 1024, 2),
+        "vms_MB": round(m.vms / 1024 / 1024, 2),
     }
 
 @app.post("/ask")
 async def ask_question(q: Question):
+    start = time.time()
     promo = "\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
-    user_question = q.question.strip()
+    user_q = q.question.strip()
 
-    # Chat history to LangChain memory
-    memory = ConversationBufferMemory(
-        memory_key="chat_history",
-        return_messages=True
-    )
-    messages = []
-    for i, msg in enumerate(q.chat_history):
-        if i % 2 == 0:
-            messages.append(HumanMessage(content=msg))
-        else:
-            messages.append(AIMessage(content=msg))
-    memory.chat_memory.messages = messages
+    # Build LangChain memory from chat_history
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    msgs = []
+    for i, m in enumerate(q.chat_history):
+        msgs.append(HumanMessage(content=m) if i % 2 == 0 else AIMessage(content=m))
+    memory.chat_memory.messages = msgs
 
     print(f"\n📚 Chat history: {q.chat_history}")
-    
-    # Summary detection
-    is_summary_request = any(kw in user_question.lower() for kw in ["summarize", "summary", "summarise", "recap"])
-    if is_summary_request:
-        print("📝 Detected summary request. Using GPT directly.")
-        full_context = build_full_context(q.chat_history, user_question)
-        gpt_answer = chat_llm.invoke(full_context).content
-        return {"answer": gpt_answer + promo}
 
-    # Check similarity scores
-    docs_with_scores = vectorstore.similarity_search_with_score(user_question, k=3)
-    if docs_with_scores:
-        print(f"📄 Retrieved docs:")
-        for doc, score in docs_with_scores:
-            print(f"🔹 Score: {score:.4f} | Content: {doc.page_content[:100]}...")
+    # 1) Summary/directive bypass
+    if any(kw in user_q.lower() for kw in ["summarize", "summary", "summarise", "recap"]):
+        print("📝 Summary requested → GPT only")
+        full_ctx = build_full_context(q.chat_history, user_q)
+        ans = chat_llm.invoke(full_ctx).content
     else:
-        print("❌ No relevant documents found.")
+        # 2) Vector search + threshold
+        docs = vectorstore.similarity_search_with_score(user_q, k=3)
+        top_score = docs[0][1] if docs else 0
+        print(f"🔎 Top score: {top_score:.4f}")
 
-    top_score = docs_with_scores[0][1] if docs_with_scores else 0
-    threshold = 0.3
-    print(f"🔎 Top similarity score: {top_score:.4f} | Threshold: {threshold}")
+        threshold = 0.30
+        if not docs or top_score <= threshold:
+            print("⚠️ No relevant doc → GPT only")
+            full_ctx = build_full_context(q.chat_history, user_q)
+            ans = chat_llm.invoke(full_ctx).content
+        else:
+            print("✅ Relevant docs → RAG")
+            qa_chain.memory = memory
+            res = qa_chain.invoke({"question": user_q})
+            ans = res["answer"]
+            print(f"🤖 RAG Answer: {ans}")
 
-    if not docs_with_scores or all(score <= threshold for _, score in docs_with_scores):
-        print("⚠️ No relevant context found. Using GPT only.")
-        full_context = build_full_context(q.chat_history, user_question)
-        answer = chat_llm.invoke(full_context).content
-    else:
-        print("✅ Relevant context found. Using retrieval-augmented generation.")
-        qa_chain.memory = memory
-        result = qa_chain.invoke({"question": user_question})
-        answer = result["answer"]
-        print(f"🤖 RAG Answer: {answer}")
+            low = ans.lower()
+            if (
+                "i don't know" in low
+                or "i am not sure" in low
+                or ("don't" in low and "context" in low)
+            ):
+                print("🔁 RAG too vague → GPT fallback")
+                full_ctx = build_full_context(q.chat_history, user_q)
+                ans = chat_llm.invoke(full_ctx).content
+                if "don't" in low and "context" in low:
+                    ans = "Can you please provide more details and context? :)\n\n" + ans
 
-        lowered = answer.lower()
-        if (
-            "i don't know" in lowered or
-            "i am not sure" in lowered or
-            ("don't" in lowered and "context" in lowered or
-             "dont" in lowered and "information" in lowered)
-        ):
-            print("🔁 RAG answer was vague. Switching to GPT with full history.")
-            full_context = build_full_context(q.chat_history, user_question)
-            gpt_fallback = chat_llm.invoke(full_context).content
+    elapsed = time.time() - start
+    print(f"⏱️ /ask total time: {elapsed:.2f}s")
+    print(f"📈 Memory: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
 
-            if "don't" in lowered and "context" in lowered:
-                gpt_fallback = "Can you please provide more details and context about it? :)\n\n" + gpt_fallback
+    return {"answer": ans + promo}
 
-            answer = gpt_fallback
 
-    # Log memory usage for debugging
-    mem = psutil.Process().memory_info().rss / 1024 / 1024
-    print(f"📈 Memory usage during /ask: {mem:.2f} MB")
+def build_full_context(history: list[str], latest: str) -> str:
+    ctx = "Here's the chat so far:\n"
+    for i, m in enumerate(history):
+        ctx += f"{'User' if i % 2 == 0 else 'Bot'}: {m}\n"
+    ctx += f"Now answer this: {latest}"
+    return ctx
 
-    return {"answer": answer + promo}
-
-def build_full_context(history: list[str], latest_question: str) -> str:
-    context = "Here's the chat so far:\n"
-    for i, msg in enumerate(history):
-        role = "User" if i % 2 == 0 else "Bot"
-        context += f"{role}: {msg}\n"
-    context += f"Now answer this: {latest_question}"
-    return context
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
