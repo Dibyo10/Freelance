@@ -25,7 +25,7 @@ app = FastAPI()
 # 1) Mount CORS first so OPTIONS never 400
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://askakivai.vercel.app"],
+    allow_origins=["https://askakivai.vercel.app","https://www.askakivai.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
