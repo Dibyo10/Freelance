@@ -330,269 +330,292 @@
   </div>
   
   <script>
-    const form = document.getElementById('chat-form');
-    const input = document.getElementById('user-input');
-    const chatBox = document.getElementById('chat-box');
-    const sendButton = document.getElementById('send-button');
-    const serverStatus = document.getElementById('server-status');
-  
-    // Configuration
-   const API_URL = 'https://askakivaai.space/ask';
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('user-input');
+  const chatBox = document.getElementById('chat-box');
+  const sendButton = document.getElementById('send-button');
+  const serverStatus = document.getElementById('server-status');
 
+  // Configuration
+  const API_URL = 'https://askakivaai.space/ask';
+  const FALLBACK_MODE = true;
+  let isServerOnline = false;
 
+  // ✅ Track chat history
+  let chatHistory = [];
 
-    const FALLBACK_MODE = true;
-    let isServerOnline = false;
-  
-    // ✅ Track chat history
-    let chatHistory = [];
-  
-    // Fallback responses
-    const fallbackResponses = {
-      "default": "I'd be happy to help you with fundraising information. Could you please be more specific about what you'd like to know?",
-      "hello": "Hello! How can I assist you with your fundraising efforts today?",
-      "donation": "We accept donations through multiple channels including credit card, PayPal, and bank transfers. Would you like information about a specific donation method?",
-      "event": "We have several upcoming fundraising events! Our annual gala is next month, and we're planning a charity run in the fall. Would you like details about either of these?",
-      "help": "There are many ways you can support our cause - through donations, volunteering, or spreading awareness. What interests you most?",
-      "volunteer": "We're always looking for volunteers! You can help with event organization, outreach, or direct service. Would you like me to send you our volunteer application form?"
-    };
-  
+  // Fallback responses
+  const fallbackResponses = {
+    "default": "I'd be happy to help you with fundraising information. Could you please be more specific about what you'd like to know?",
+    "hello": "Hello! How can I assist you with your fundraising efforts today?",
+    "donation": "We accept donations through multiple channels including credit card, PayPal, and bank transfers. Would you like information about a specific donation method?",
+    "event": "We have several upcoming fundraising events! Our annual gala is next month, and we're planning a charity run in the fall. Would you like details about either of these?",
+    "help": "There are many ways you can support our cause - through donations, volunteering, or spreading awareness. What interests you most?",
+    "volunteer": "We're always looking for volunteers! You can help with event organization, outreach, or direct service. Would you like me to send you our volunteer application form?"
+  };
+
+  setTimeout(() => {
+    appendMessage('bot', "Hi there! I'm your fundraising assistant. How can I help you today?");
+  }, 1000);
+
+  // 🔁 Auto-Retry Server Check Variables
+  let retryCount = 0;
+  const MAX_RETRIES = 5;
+  const RETRY_INTERVAL_MS = 5000;
+
+  function startRetryingServerCheck() {
+    const retryInterval = setInterval(async () => {
+      console.log(`Retrying server check... (${retryCount + 1})`);
+      retryCount++;
+      await checkServerStatus();
+
+      if (isServerOnline) {
+        clearInterval(retryInterval);
+        retryCount = 0;
+        console.log("✅ Server is back online!");
+      }
+
+      if (retryCount >= MAX_RETRIES) {
+        clearInterval(retryInterval);
+        console.warn("❌ Max server retries reached.");
+      }
+    }, RETRY_INTERVAL_MS);
+  }
+
+  async function checkServerStatus() {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: "test", chat_history: [] }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        isServerOnline = true;
+        serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
+      } else {
+        throw new Error("Non-200 response");
+      }
+    } catch (err) {
+      isServerOnline = false;
+      serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Retrying...</span>';
+      startRetryingServerCheck();
+    }
+
     setTimeout(() => {
-      appendMessage('bot', "Hi there! I'm your fundraising assistant. How can I help you today?");
-    }, 1000);
-  
-    checkServerStatus();
-  
-    function getCurrentTime() {
-      const now = new Date();
-      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-  
-    function appendMessage(role, text) {
-      const messageContainer = document.createElement('div');
-      messageContainer.className = 'message-container';
-  
-      const avatar = document.createElement('div');
-      avatar.className = 'avatar';
-      avatar.style.width = '32px';
-      avatar.style.height = '32px';
-      avatar.style.borderRadius = '50%';
-      avatar.style.backgroundSize = 'cover';
-  
-      if (role === 'user') {
-        messageContainer.style.flexDirection = 'row-reverse';
-        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/initials/svg?seed=U&backgroundColor=ff8c42')`;
-      } else if (role === 'error') {
-        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Error&backgroundColor=ef4444')`;
-      } else {
-        avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
-      }
-  
-      const bubble = document.createElement('div');
-      bubble.className = `chat-message ${role}`;
-      bubble.innerText = text;
-  
-      const timestamp = document.createElement('div');
-      timestamp.className = 'timestamp';
-      timestamp.innerText = getCurrentTime();
-      bubble.appendChild(timestamp);
-  
-      if (role === 'user') {
-        messageContainer.appendChild(bubble);
-        messageContainer.appendChild(avatar);
-      } else {
-        messageContainer.appendChild(avatar);
-        messageContainer.appendChild(bubble);
-      }
-  
-      chatBox.appendChild(messageContainer);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-  
-    function appendErrorMessage(errorMessage, details) {
-      const errorContainer = document.createElement('div');
-      errorContainer.className = 'connection-error';
-  
-      const errorIcon = document.createElement('div');
-      errorIcon.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>`;
-  
-      const errorContent = document.createElement('div');
-      errorContent.innerHTML = `
-        <div>${errorMessage}</div>
-        ${details ? `<div class="error-details">${details}</div>` : ''}
-      `;
-  
-      errorContainer.appendChild(errorIcon);
-      errorContainer.appendChild(errorContent);
-  
-      chatBox.appendChild(errorContainer);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-  
-    function showTypingIndicator() {
-      const typingContainer = document.createElement('div');
-      typingContainer.className = 'message-container';
-      typingContainer.id = 'typing-indicator-container';
-  
-      const avatar = document.createElement('div');
-      avatar.className = 'avatar';
-      avatar.style.width = '32px';
-      avatar.style.height = '32px';
-      avatar.style.borderRadius = '50%';
-      avatar.style.backgroundSize = 'cover';
+      serverStatus.style.opacity = '0';
+      serverStatus.style.transition = 'opacity 0.5s';
+    }, 5000);
+  }
+
+  function getCurrentTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function appendMessage(role, text) {
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'message-container';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.style.width = '32px';
+    avatar.style.height = '32px';
+    avatar.style.borderRadius = '50%';
+    avatar.style.backgroundSize = 'cover';
+
+    if (role === 'user') {
+      messageContainer.style.flexDirection = 'row-reverse';
+      avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/initials/svg?seed=U&backgroundColor=ff8c42')`;
+    } else if (role === 'error') {
+      avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Error&backgroundColor=ef4444')`;
+    } else {
       avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
-  
-      const typingIndicator = document.createElement('div');
-      typingIndicator.className = 'typing-indicator bot';
-  
-      for (let i = 0; i < 3; i++) {
-        const dot = document.createElement('span');
-        typingIndicator.appendChild(dot);
-      }
-  
-      typingContainer.appendChild(avatar);
-      typingContainer.appendChild(typingIndicator);
-  
-      chatBox.appendChild(typingContainer);
-      chatBox.scrollTop = chatBox.scrollHeight;
     }
-  
-    function removeTypingIndicator() {
-      const typingContainer = document.getElementById('typing-indicator-container');
-      if (typingContainer) {
-        typingContainer.remove();
+
+    const bubble = document.createElement('div');
+    bubble.className = `chat-message ${role}`;
+    bubble.innerText = text;
+
+    const timestamp = document.createElement('div');
+    timestamp.className = 'timestamp';
+    timestamp.innerText = getCurrentTime();
+    bubble.appendChild(timestamp);
+
+    if (role === 'user') {
+      messageContainer.appendChild(bubble);
+      messageContainer.appendChild(avatar);
+    } else {
+      messageContainer.appendChild(avatar);
+      messageContainer.appendChild(bubble);
+    }
+
+    chatBox.appendChild(messageContainer);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function appendErrorMessage(errorMessage, details) {
+    const errorContainer = document.createElement('div');
+    errorContainer.className = 'connection-error';
+
+    const errorIcon = document.createElement('div');
+    errorIcon.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>`;
+
+    const errorContent = document.createElement('div');
+    errorContent.innerHTML = `
+      <div>${errorMessage}</div>
+      ${details ? `<div class="error-details">${details}</div>` : ''}
+    `;
+
+    errorContainer.appendChild(errorIcon);
+    errorContainer.appendChild(errorContent);
+
+    chatBox.appendChild(errorContainer);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function showTypingIndicator() {
+    const typingContainer = document.createElement('div');
+    typingContainer.className = 'message-container';
+    typingContainer.id = 'typing-indicator-container';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.style.width = '32px';
+    avatar.style.height = '32px';
+    avatar.style.borderRadius = '50%';
+    avatar.style.backgroundSize = 'cover';
+    avatar.style.backgroundImage = `url('https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Bot')`;
+
+    const typingIndicator = document.createElement('div');
+    typingIndicator.className = 'typing-indicator bot';
+
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      typingIndicator.appendChild(dot);
+    }
+
+    typingContainer.appendChild(avatar);
+    typingContainer.appendChild(typingIndicator);
+
+    chatBox.appendChild(typingContainer);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function removeTypingIndicator() {
+    const typingContainer = document.getElementById('typing-indicator-container');
+    if (typingContainer) {
+      typingContainer.remove();
+    }
+  }
+
+  function getFallbackResponse(userMessage) {
+    const lowerCaseMsg = userMessage.toLowerCase();
+    for (const [key, response] of Object.entries(fallbackResponses)) {
+      if (key !== 'default' && lowerCaseMsg.includes(key)) {
+        return response;
       }
     }
-  
-    async function checkServerStatus() {
-      try {
+    return fallbackResponses.default;
+  }
+
+  // ✅ Updated handleSubmit to send chat_history
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const userMessage = input.value.trim();
+    if (!userMessage) return;
+
+    appendMessage('user', userMessage);
+    chatHistory.push(userMessage);
+    input.value = '';
+    showTypingIndicator();
+
+    try {
+      if (isServerOnline) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-  
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: "test", chat_history: [] }),
-          signal: controller.signal
-        });
-  
-        clearTimeout(timeoutId);
-  
-        if (response.ok) {
-          const data = await response.json();
-          isServerOnline = true;
-          serverStatus.innerHTML = '<span class="status-online">● Server is online</span>';
-        } else {
-          throw new Error("Non-200 response");
-        }
-      } catch (err) {
-        isServerOnline = false;
-        serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-      }
-  
-      setTimeout(() => {
-        serverStatus.style.opacity = '0';
-        serverStatus.style.transition = 'opacity 0.5s';
-      }, 5000);
-    }
-  
-    function getFallbackResponse(userMessage) {
-      const lowerCaseMsg = userMessage.toLowerCase();
-      for (const [key, response] of Object.entries(fallbackResponses)) {
-        if (key !== 'default' && lowerCaseMsg.includes(key)) {
-          return response;
-        }
-      }
-      return fallbackResponses.default;
-    }
-  
-    // ✅ Updated handleSubmit to send chat_history
-    async function handleSubmit(e) {
-      e.preventDefault();
-      const userMessage = input.value.trim();
-      if (!userMessage) return;
-  
-      appendMessage('user', userMessage);
-      chatHistory.push(userMessage);
-      input.value = '';
-      showTypingIndicator();
-  
-      try {
-        if (isServerOnline) {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-  
-          try {
-            const res = await fetch(API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                question: userMessage,
-                chat_history: chatHistory
-              }),
-              signal: controller.signal
-            });
-  
-            clearTimeout(timeoutId);
-  
-            if (res.ok) {
-              const data = await res.json();
-              removeTypingIndicator();
-  
-              let answer = typeof data.answer === 'string'
-                ? data.answer
-                : `<pre>${JSON.stringify(data.answer, null, 2)}</pre>`;
-  
-              appendMessage('bot', answer);
-              chatHistory.push(answer);
-              return;
-            }
-          } catch (fetchError) {
-            isServerOnline = false;
-            serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Using fallback mode</span>';
-            serverStatus.style.opacity = '1';
-            setTimeout(() => {
-              serverStatus.style.opacity = '0';
-            }, 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: userMessage,
+              chat_history: chatHistory
+            }),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const data = await res.json();
+            removeTypingIndicator();
+
+            let answer = typeof data.answer === 'string'
+              ? data.answer
+              : `<pre>${JSON.stringify(data.answer, null, 2)}</pre>`;
+
+            appendMessage('bot', answer);
+            chatHistory.push(answer);
+            return;
           }
+        } catch (fetchError) {
+          isServerOnline = false;
+          serverStatus.innerHTML = '<span class="status-offline">● Server is offline - Retrying...</span>';
+          serverStatus.style.opacity = '1';
+          startRetryingServerCheck();
+          setTimeout(() => {
+            serverStatus.style.opacity = '0';
+          }, 5000);
         }
-  
-        if (FALLBACK_MODE) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          removeTypingIndicator();
-          const fallback = getFallbackResponse(userMessage);
-          appendMessage('bot', fallback);
-          chatHistory.push(fallback);
-        } else {
-          removeTypingIndicator();
-          appendErrorMessage(
-            "Cannot connect to the server",
-            "The chatbot is currently running in offline mode. Please check your server connection."
-          );
-        }
-      } catch (err) {
+      }
+
+      if (FALLBACK_MODE) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
         removeTypingIndicator();
-        appendErrorMessage("An error occurred", err.message || "Unknown error");
+        const fallback = getFallbackResponse(userMessage);
+        appendMessage('bot', fallback);
+        chatHistory.push(fallback);
+      } else {
+        removeTypingIndicator();
+        appendErrorMessage(
+          "Cannot connect to the server",
+          "The chatbot is currently running in offline mode. Please check your server connection."
+        );
       }
+    } catch (err) {
+      removeTypingIndicator();
+      appendErrorMessage("An error occurred", err.message || "Unknown error");
     }
-  
-    form.addEventListener('submit', handleSubmit);
-    sendButton.addEventListener('click', function(e) {
-      e.preventDefault();
-      if (input.value.trim() !== '') {
-        handleSubmit(e);
-      }
-    });
-  
-    window.onload = function() {
-      input.focus();
-    };
+  }
+
+  form.addEventListener('submit', handleSubmit);
+  sendButton.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (input.value.trim() !== '') {
+      handleSubmit(e);
+    }
+  });
+
+  window.onload = function () {
+    input.focus();
+    checkServerStatus(); // ✅ trigger check on load
+  };
 </script>
+
 
 
   
