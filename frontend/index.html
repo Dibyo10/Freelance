@@ -375,7 +375,7 @@
     async function checkServerStatus() {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout set to 10 seconds
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // Timeout set to 10 seconds
   
         const response = await fetch(API_URL, {
           method: 'POST',
@@ -532,7 +532,7 @@
       try {
         if (isServerOnline) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout set to 10 seconds
+          const timeoutId = setTimeout(() => controller.abort(), 20000); // Timeout set to 10 seconds
   
           try {
             const res = await fetch(API_URL, {
