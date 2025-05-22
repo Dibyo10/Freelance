@@ -24,7 +24,7 @@ It helped me earn my **first $100 as a freelancer.**
 - ✅ Fallback logic to GPT if vector search is vague  
 - ✅ Smart offline/online mode detection with graceful fallback responses  
 - ✅ Lightweight frontend with avatars, timestamps, and typing animations  
-- ✅ Free-tier deployment (FastAPI + Vercel)  
+- ✅ Free-tier deployment (FastAPI + AWS +Vercel)  
 
 ---
 
@@ -38,25 +38,12 @@ It helped me earn my **first $100 as a freelancer.**
 | LLM               | `OpenAI GPT-3.5`                 |
 | API Framework     | `FastAPI`                        |
 | Frontend          | Custom HTML/CSS/JS               |
-| Deployment (API)  | Render (Free Tier)               |
+| Deployment (API)  | AWS EC2(Free Tier)               |
 | Deployment (UI)   | Vercel                           |
 
 ---
 
-## ⚠️ Free Tier Issues (Cold Starts)
 
-Free hosting like Render sleeps after inactivity. This leads to **slow initial responses or errors**.
 
-### ✅ Workaround:
-
-To reduce downtime, I used:
-- [**UptimeRobot**](https://uptimerobot.com/) → Pings the API every 5 mins
-- [**cron-job.org**](https://cron-job.org) → Sends scheduled POST requests to `/ask` to simulate real use
-
-Despite these efforts, **cold start delays still happen occasionally**.
-
-**👉 If you have better free hosting tips — PRs or issues are welcome!**
-
----
 
 
