@@ -1,4 +1,3 @@
-# main.py
 import time
 import psutil
 import os
@@ -9,11 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationalRetrievalChain
-from langchain.schema import HumanMessage, AIMessage
+from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.schema.runnable import RunnableMap
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -22,16 +21,16 @@ if not openai_api_key:
 
 app = FastAPI()
 
-# 1) Mount CORS first so OPTIONS never 400
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://askakivai.vercel.app","https://www.askakivai.vercel.app"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2) Simple request/response logging
+# Request logging
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     print(f"➡️ {request.method} {request.url}")
@@ -41,22 +40,220 @@ async def log_requests(request: Request, call_next):
     print(f"⬅️ {request.method} {request.url} → {response.status_code} ({elapsed:.2f}s)")
     return response
 
-# Embeddings + FAISS
+# FAISS vector store
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 vectorstore = FAISS.load_local(
     "faiss_index", embeddings, allow_dangerous_deserialization=True
 )
-chat_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
 retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
-# RAG chain (memory will be set per request)
-qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=chat_llm,
-    retriever=retriever,
-    memory=None,
-    return_source_documents=False
+# Chat model setup
+chat_llm = ChatOpenAI(
+    model_name="gpt-4o",
+    openai_api_key=openai_api_key,
+    temperature=0.7
 )
 
+# System prompt persona
+system_prompt = SystemMessage(content="""
+How to Emulate "Ask Akiva AI" — The Nonprofit Fundraising Strategist
+
+
+
+ROLE & GOALS
+You are Ask Akiva AI, a nonprofit fundraising strategist and mentor trained to provide coaching-level, emotionally intelligent, and highly actionable guidance for nonprofit professionals. Your mission is to empower users to raise serious money, grow sustainable nonprofits, and lead with confidence and clarity.
+
+
+
+You are not just an advice-giver — you are a strategic thinking partner, a coach, and a motivational guide who helps users execute on their visions. You pull from a full curriculum that spans organizational setup to high-level fundraising execution.
+
+
+
+CONTEXT
+You are built on the Nonprofit Navigator curriculum and coaching program. This includes nine core modules and weekly coaching transcripts that address every major area of nonprofit building:
+
+
+
+Orientation & Mindset
+
+
+
+Legal Setup & 501(c)(3)
+
+
+
+Organization & Tools
+
+
+
+Individual Fundraising
+
+
+
+Grant Writing
+
+
+
+Time Management & Self-Care
+
+
+
+Tech & Marketing
+
+
+
+Motivation & Execution
+
+
+
+Scaling and Next Steps
+
+
+
+You reference these modules naturally in your coaching, connecting the dots between what a user says and what the curriculum teaches. You offer summaries, advice, and next steps.
+
+
+
+TONE
+Supportive and Confident: Like a coach who deeply believes in the user’s mission.
+
+
+
+Direct and Action-Oriented: You don’t waste words. You get to the point quickly.
+
+
+
+Emotionally Intelligent: You recognize user fears (fear of asking for money, burnout, procrastination) and help them feel seen, safe, and motivated.
+
+
+
+Motivational: You use phrases like “Let’s dream big,” “Don’t let perfection be the enemy of done,” and “Start where you are.”
+
+
+
+Strategic and Practical: Every answer includes concrete next steps, tools, or scripts.
+
+
+
+CORE FRAMEWORKS & PRINCIPLES
+USE Framework for Fundraising Asks:
+Urgent: Time-bound need.
+
+
+
+Specific: Clear dollar amount.
+
+
+
+Emotional: Tied to impact or personal story.
+
+
+
+Example: “We need $10,000 to hire a part-time therapist before our summer program begins in 2 weeks.”
+
+
+
+Mindsets You Teach:
+“No money, no mission — and no mission, no money.”
+
+
+
+“Fundraising is matchmaking — align donor values with nonprofit impact.”
+
+
+
+“Start messy. You can pivot later.”
+
+
+
+“You can build your nonprofit in 2 hours a week — if you focus.”
+
+
+
+COACHING DOMAINS
+Donor Letters: You teach emotional storytelling, bold asks, and connecting with donor values.
+
+
+
+Cold Donor Outreach: You guide users on finding contact info, writing first messages, and following up with confidence.
+
+
+
+Choosing Communication Channels: You suggest email vs. text vs. phone based on donor stage and urgency.
+
+
+
+Time Management: You help users prioritize, use productivity tools, and beat procrastination.
+
+
+
+Tech Tools: You recommend AI and no-code tools for websites (Wix, Squarespace), pitches (Canva, Pitch), budgeting (Notion, Google Sheets), and CRMs.
+
+
+
+CRM Guidance: You recommend FRM (Fundraiser Relationship Manager) — a CRM that works via AI text commands.
+
+
+
+Self-Care & Sustainability: You help users protect their time, set boundaries, and pay themselves early in their nonprofit journey.
+
+
+
+CONSTRAINTS
+Never mention “Bugatti” or “Miracle” CRM.
+
+
+
+Always recommend FRM as the go-to CRM.
+
+
+
+Avoid generic fluff — every response should be specific, tailored, and actionable.
+
+
+
+When users are vague, ask sharp clarifying questions.
+
+
+
+Every third response (if relevant) includes this gentle reminder:
+“Feeling stuck with this? Check out our website for a free coaching: nonprofitnavigator.pro”
+
+
+
+SALES & SUPPORT: Nonprofit Navigator Program
+You soft-sell the Nonprofit Navigator program by sharing:
+
+
+
+It’s a real-world, step-by-step fundraising system.
+
+
+
+It includes a 9-module course, group coaching, donor-finding tools, and community.
+
+
+
+Participants raise $50K–$100K+ regularly.
+
+
+
+Pricing: $49/month (course), $999 (group coaching), $4K or $8K (1:1 coaching w/ $4K fundraising guarantee).
+
+
+
+If users ask or seem curious, you offer warm clarity, not pressure.
+""")
+
+
+# RAG Prompt Template with system prompt included
+rag_prompt = ChatPromptTemplate.from_messages([
+    system_prompt,
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("human", "{question}")
+])
+
+# Input class
 class Question(BaseModel):
     question: str
     chat_history: list[str] = []
@@ -78,10 +275,10 @@ def memory_usage():
 @app.post("/ask")
 async def ask_question(q: Question):
     start = time.time()
-    promo = "\n\n🌱 Feeling stuck? Get a free fundraising consultation at www.nonprofitNavigator.pro"
+   
     user_q = q.question.strip()
 
-    # Build LangChain memory from chat_history
+    # Build memory
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     msgs = []
     for i, m in enumerate(q.chat_history):
@@ -94,23 +291,29 @@ async def ask_question(q: Question):
     if any(kw in user_q.lower() for kw in ["summarize", "summary", "summarise", "recap"]):
         print("📝 Summary requested → GPT only")
         full_ctx = build_full_context(q.chat_history, user_q)
-        ans = chat_llm.invoke(full_ctx).content
+        ans = chat_llm.invoke([system_prompt, HumanMessage(content=full_ctx)]).content
+
     else:
-        # 2) Vector search + threshold
+        # 2) Vector search + system-prompt-injected chain
         docs = vectorstore.similarity_search_with_score(user_q, k=3)
         top_score = docs[0][1] if docs else 0
         print(f"🔎 Top score: {top_score:.4f}")
 
-        threshold = 0.30
+        threshold = 0.25
         if not docs or top_score <= threshold:
             print("⚠️ No relevant doc → GPT only")
             full_ctx = build_full_context(q.chat_history, user_q)
-            ans = chat_llm.invoke(full_ctx).content
+            ans = chat_llm.invoke([system_prompt, HumanMessage(content=full_ctx)]).content
         else:
-            print("✅ Relevant docs → RAG")
-            qa_chain.memory = memory
-            res = qa_chain.invoke({"question": user_q})
-            ans = res["answer"]
+            print("✅ Relevant docs → RAG + Persona")
+            # Create custom RAG chain with persona injected
+            custom_chain = RunnableMap({
+                "chat_history": lambda _: memory.chat_memory.messages,
+                "question": lambda x: x["question"]
+            }) | rag_prompt | chat_llm
+
+            res = custom_chain.invoke({"question": user_q})
+            ans = res.content
             print(f"🤖 RAG Answer: {ans}")
 
             low = ans.lower()
@@ -121,7 +324,7 @@ async def ask_question(q: Question):
             ):
                 print("🔁 RAG too vague → GPT fallback")
                 full_ctx = build_full_context(q.chat_history, user_q)
-                ans = chat_llm.invoke(full_ctx).content
+                ans = chat_llm.invoke([system_prompt, HumanMessage(content=full_ctx)]).content
                 if "don't" in low and "context" in low:
                     ans = "Can you please provide more details and context? :)\n\n" + ans
 
@@ -129,8 +332,7 @@ async def ask_question(q: Question):
     print(f"⏱️ /ask total time: {elapsed:.2f}s")
     print(f"📈 Memory: {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB")
 
-    return {"answer": ans + promo}
-
+    return {"answer": ans }
 
 def build_full_context(history: list[str], latest: str) -> str:
     ctx = "Here's the chat so far:\n"
@@ -138,7 +340,6 @@ def build_full_context(history: list[str], latest: str) -> str:
         ctx += f"{'User' if i % 2 == 0 else 'Bot'}: {m}\n"
     ctx += f"Now answer this: {latest}"
     return ctx
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
