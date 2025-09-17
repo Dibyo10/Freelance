@@ -1,6 +1,6 @@
-# 🧠 Custom-Trained AI Chatbot for Fundraising Docs
+# 🧠 RAG-Based AI Chatbot for Fundraising Docs
 
-This is a **custom-trained AI chatbot** built for a freelance client to help answer fundraising-related questions — strictly based on their internal documents (PDFs, Word files).
+This is a **RAG-based AI chatbot** built for a freelance client to help answer fundraising-related questions — strictly based on their internal documents (PDFs, Word files).
 
 The project combines **LangChain**, **OpenAI**, and **FastAPI** with a custom frontend to deliver an interactive, document-aware chatbot.  
 It helped me earn my **first $100 as a freelancer.**
@@ -18,7 +18,7 @@ It helped me earn my **first $100 as a freelancer.**
 
 ## 📦 Features
 
-- ✅ Custom-trained on client’s fundraising PDFs and DOCX files  
+- ✅ RAG-based answering on client’s fundraising PDFs and DOCX files  
 - ✅ Chat history memory with context-aware answers  
 - ✅ Vector search using **FAISS** and **OpenAIEmbeddings**  
 - ✅ Fallback logic to GPT if vector search is vague  
@@ -42,8 +42,3 @@ It helped me earn my **first $100 as a freelancer.**
 | Deployment (UI)   | Vercel                           |
 
 ---
-
-
-
-
-
